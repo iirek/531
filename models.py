@@ -1,11 +1,11 @@
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, scoped_session
 
-from sqlalchemy import UniqueConstraint, Index
+from sqlalchemy import UniqueConstraint, Index, CheckConstraint
 from sqlalchemy.orm import relationship, backref
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.schema import Column, ForeignKey
-from sqlalchemy.types import Integer, String, Date, DateTime, Text, Boolean, Float, Text, Timestamp
+from sqlalchemy.types import Integer, Date, DateTime, Text, Numeric
 
 
 from sqlalchemy.ext.declarative import declarative_base
@@ -30,7 +30,7 @@ Model = declarative_base(bind=get_engine())
 
 
 class Lift(Model):
-    __tablename = 'lifts'
+    __tablename__ = 'lifts'
 
     id = Column(Integer, primary_key=True)
 
@@ -52,11 +52,39 @@ class LiftIncrement(Model):
 
     id = Column(Integer, primary_key=True)
     
+    lift = Column(Text, ForeignKey('lifts.name'))
+
+    increment = Column(Numeric(10,2), nullable=False)
 
 
-class CycleLifMax(Model):
+class CycleLiftMax(Model):
     __tablename__ = 'cycle_lift_max'
+
+    id = Column(Integer, primary_key=True)
+
+    lift = Column(Text, ForeignKey('lifts.name'))
+
+    amount = Column(Numeric(10,2), nullable=False)
+
+    cycle_index = Column(Integer, ForeignKey('cycles.index'))
+
 
 
 class CycleLiftWeekly(Model):
     __tablename__ = 'cycle_lift_weekly'
+
+    id = Column(Integer, primary_key=True)
+
+    week = Column(Integer, CheckConstraint('week < 5'))
+
+    lift = Column(Text, ForeignKey('lifts.name'))
+
+    amount = Column(Numeric(10,2), nullable=False)
+
+    reps = Column(Integer, CheckConstraint('reps < 6'))
+
+    percentage = Column(Integer, nullable=False)
+
+    reps_achieved = Column(Integer)
+
+    cycle_index = Column(Integer, ForeignKey('cycles.index'))
