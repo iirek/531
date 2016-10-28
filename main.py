@@ -7,6 +7,8 @@ from decimal import Decimal
 from io import StringIO
 from typing import List, Dict, DefaultDict, NamedTuple
 
+from models import get_db, Cycle, CycleLiftMax, CycleLiftWeekly
+
 
 TWO_PLACES = Decimal(10) ** -2
 WEEKS = ['week_1', 'week_2', 'week_3', 'week_4']
@@ -150,9 +152,46 @@ def save_cycle_to_disk(csv_files: List[StringIO]):
         with open(os.path.join(new_cycle_path, '{}.csv'.format(file_name)), 'w') as f:
             f.write(file_content.getvalue())
 
+def save_cycle_to_db(generated_cycle: DefaultDict[str, DefaultDict[str, List[LiftData]]]):
+    db = get_db()
+    cycle = Cycle()
+    for lift in generated_cycle['test_max']:
+        cycle_lift = CycleLiftMax(lift=lift, amount=generated_cycle['test_max'][lift], cycle=cycle)
+        db.add(cycle_lift)
+    for week in range(1,5):
+        try:
+            week_title = 'week_{}'.format(week)
+            for lift in generated_cycle[week_title]:
+                for lift_data in generated_cycle[week_title][lift]:
+                    cycle_lift_weekly=CycleLiftWeekly(
+                        week=week,
+                        lift=lift,
+                        amount=lift_data.weight,
+                        reps=lift_data.reps,
+                        percentage=lift_data.percentile,
+                        cycle=cycle
+                    )
+                    db.add(cycle_lift_weekly)
+
+
+        except KeyError:
+            if week != 4:
+                print("something's wrong looks like data for week {} is missing".format(week))
+            pass 
+    db.add(cycle)
+    db.commit()
+
+
+
 
 if __name__ == "__main__":
-    lifts_info = gather_lifts_info()
+    # lifts_info = gather_lifts_info()
+    lifts_info = {
+        'Press': LiftWeightRep(50, 5),
+        'Deadlift': LiftWeightRep(140, 3),
+        'Bench press': LiftWeightRep(77, 3),
+        'Squat': LiftWeightRep(110, 3)
+    }
 
     lifts_one_rep_max = {
         lift_name: get_one_rep_max(reps_and_weight)
@@ -165,4 +204,7 @@ if __name__ == "__main__":
         lifts_one_rep_max.items()
     }
     cycle = generate_training_cycle(lifts_training_one_rep_max)
+    save_cycle_to_db(cycle)
+
+
     save_cycle_to_disk(generate_csv_for_cycle(cycle))

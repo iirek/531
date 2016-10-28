@@ -1,10 +1,11 @@
+import datetime
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, scoped_session
 
 from sqlalchemy import UniqueConstraint, Index, CheckConstraint
 from sqlalchemy.orm import relationship, backref
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.schema import Column, ForeignKey
+from sqlalchemy.schema import Column, ForeignKey, Sequence
 from sqlalchemy.types import Integer, Date, DateTime, Text, Numeric
 
 
@@ -42,9 +43,13 @@ class Cycle(Model):
 
     id = Column(Integer, primary_key=True)
 
-    start_date = Column(DateTime)
+    start_date = Column(DateTime, default=datetime.datetime.utcnow)
 
-    index = Column(Integer, unique=True)
+    index = Column(Integer, Sequence('cycle_index_seq'), unique=True)
+
+    cycle_lifts_max = relationship('CycleLiftMax', back_populates='cycle')
+
+    cycle_lifts_weekly = relationship('CycleLiftWeekly', back_populates='cycle')
 
 
 class LiftIncrement(Model):
@@ -68,6 +73,8 @@ class CycleLiftMax(Model):
 
     cycle_index = Column(Integer, ForeignKey('cycles.index'))
 
+    cycle = relationship('Cycle', back_populates='cycle_lifts_max')
+
 
 
 class CycleLiftWeekly(Model):
@@ -81,10 +88,12 @@ class CycleLiftWeekly(Model):
 
     amount = Column(Numeric(10,2), nullable=False)
 
-    reps = Column(Integer, CheckConstraint('reps < 6'))
+    reps = Column(Text) # needs to be properly fixed to use int and flag to indicate more than x such as 3+ 
 
     percentage = Column(Integer, nullable=False)
 
     reps_achieved = Column(Integer)
 
     cycle_index = Column(Integer, ForeignKey('cycles.index'))
+
+    cycle = relationship('Cycle', back_populates='cycle_lifts_weekly')
