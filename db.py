@@ -16,8 +16,16 @@ def create_db():
     db = get_db()
     for lift in ['Press', 'Deadlift', 'Bench press', 'Squat']:
         db.add(Lift(name=lift))
+    
     db.commit()
-    print('Added 4 main Lifts...')
+    print('Added 4 main Lifts')
+
+    for lift in ['Press', 'Deadlift', 'Bench press', 'Squat']:
+        increment_amount = 2.5 if 'press' in lift.lower() else 5
+        db.add(LiftIncrement(lift=lift, amount=increment_amount))
+     
+    db.commit()
+    print('...and their default increments')
 
 
 @click.command('drop')

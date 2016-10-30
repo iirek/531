@@ -6,8 +6,12 @@ from collections import namedtuple, defaultdict
 from decimal import Decimal
 from io import StringIO
 from typing import List, Dict, DefaultDict, NamedTuple
+from sqlalchemy import func
+from sqlalchemy.orm import Load
+from sqlalchemy.orm.exc import NoResultFound
+from sqlalchemy.sql.functions import coalesce
 
-from models import get_db, Cycle, CycleLiftMax, CycleLiftWeekly
+from models import get_db, Cycle, CycleLiftMax, CycleLiftWeekly, CycleLiftIncrement, LiftIncrement
 
 
 TWO_PLACES = Decimal(10) ** -2
@@ -181,11 +185,48 @@ def save_cycle_to_db(generated_cycle: DefaultDict[str, DefaultDict[str, List[Lif
     db.add(cycle)
     db.commit()
 
+def previous_data_exists() -> bool:
+    db = get_db()
+    return True if db.query(Cycle).first() else False
 
+
+def get_latest_cycle() -> Cycle:
+    db = get_db()
+    return db.query(Cycle).order_by(Cycle.index.desc()).first()
+
+
+def calculate_new_training_max(cycle: Cycle) -> typing.Dict[str, Decimal]:
+    db = get_db()
+    new_training_max = db.query(
+        CycleLiftMax.lift,
+        CycleLiftMax.amount + coalesce(CycleLiftIncrement.amount, LiftIncrement.amount),
+      ).outerjoin(
+        CycleLiftIncrement, CycleLiftMax.lift==CycleLiftIncrement.lift
+    ).join(
+        LiftIncrement, CycleLiftMax.lift==LiftIncrement.lift
+    ).filter(
+        CycleLiftMax.cycle == cycle
+    ).all()
+
+    training_maxes = {}
+
+    for row in new_training_max:
+        training_maxes[row[0]] = row[1]
+    return training_maxes
 
 
 if __name__ == "__main__":
-    lifts_info = gather_lifts_info()
+    if previous_data_exists():
+        import sys
+        most_recent_cycle = get_latest_cycle()
+        new_training_max = calculate_new_training_max(most_recent_cycle)
+        new_cycle = generate_training_cycle(new_training_max)
+        save_cycle_to_db(new_cycle)
+        sys.exit()
+
+    else:
+        lifts_info = gather_lifts_info()
+
 
     lifts_one_rep_max = {
         lift_name: get_one_rep_max(reps_and_weight)
