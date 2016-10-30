@@ -185,13 +185,7 @@ def save_cycle_to_db(generated_cycle: DefaultDict[str, DefaultDict[str, List[Lif
 
 
 if __name__ == "__main__":
-    # lifts_info = gather_lifts_info()
-    lifts_info = {
-        'Press': LiftWeightRep(50, 5),
-        'Deadlift': LiftWeightRep(140, 3),
-        'Bench press': LiftWeightRep(77, 3),
-        'Squat': LiftWeightRep(110, 3)
-    }
+    lifts_info = gather_lifts_info()
 
     lifts_one_rep_max = {
         lift_name: get_one_rep_max(reps_and_weight)
