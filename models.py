@@ -51,6 +51,8 @@ class Cycle(Model):
 
     cycle_lifts_weekly = relationship('CycleLiftWeekly', back_populates='cycle')
 
+    cycle_lift_increments = relationship('CycleLiftIncrement', back_populates='cycle')
+
 
 class LiftIncrement(Model):
     __tablename__ = 'lift_increments'
@@ -59,7 +61,22 @@ class LiftIncrement(Model):
     
     lift = Column(Text, ForeignKey('lifts.name'))
 
-    increment = Column(Numeric(10,2), nullable=False)
+    amount = Column(Numeric(10,2), nullable=False)
+
+
+class CycleLiftIncrement(Model):
+    __tablename__ = 'cycle_lift_increments'
+
+    id = Column(Integer, primary_key=True)
+
+    lift = Column(Text, ForeignKey('lifts.name'))
+
+    amount = Column(Numeric(10,2), nullable=False)
+
+    cycle_index = Column(Integer, ForeignKey('cycles.index'))
+
+    cycle = relationship('Cycle', back_populates='cycle_lift_increments')
+
 
 
 class CycleLiftMax(Model):
