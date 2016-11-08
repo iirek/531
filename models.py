@@ -111,6 +111,8 @@ class CycleLiftWeekly(Model):
 
     reps_achieved = Column(Integer)
 
+    amount_achieved = Column(Integer)
+
     cycle_index = Column(Integer, ForeignKey('cycles.index'))
 
     cycle = relationship('Cycle', back_populates='cycle_lifts_weekly')

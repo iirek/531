@@ -24,7 +24,9 @@ def convert_to_expected_format(data: List[Dict[str, Union[int, float]]])-> List[
 
 
 if __name__ == '__main__':
-    data = load_data('cycles.json')
+    import sys
+    dump_path = sys.argv[1]
+    data = load_data(dump_path)
     converted_data = convert_to_expected_format(data)
     for cycle in converted_data:
         generated_cycle = generate_training_cycle(cycle)

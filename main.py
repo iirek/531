@@ -2,13 +2,12 @@ import csv
 import typing
 import os
 
-from collections import namedtuple, defaultdict
+from collections import defaultdict
 from decimal import Decimal
 from io import StringIO
-from typing import List, Dict, DefaultDict, NamedTuple
+from typing import List, Dict, DefaultDict, NamedTuple, Optional, Union, Tuple
 from sqlalchemy import func
 from sqlalchemy.orm import Load
-from sqlalchemy.orm.exc import NoResultFound
 from sqlalchemy.sql.functions import coalesce
 
 from models import get_db, Cycle, CycleLiftMax, CycleLiftWeekly, CycleLiftIncrement, LiftIncrement
@@ -30,7 +29,6 @@ IntensityAndReps = NamedTuple('IntensityAndReps', [('percentile', int), ('reps',
 
 
 def get_weekly_reps_and_intensity() -> Dict[str, List[IntensityAndReps]]:
-
 
     weekly_reps = {
         'week_1': [
@@ -63,7 +61,8 @@ def get_weekly_reps_and_intensity() -> Dict[str, List[IntensityAndReps]]:
 
 def rounder(num: Decimal) -> Decimal:
     round_to_nearest = Decimal(2.5)
-    return Decimal(round_to_nearest * round(num / round_to_nearest))
+    result = Decimal(round_to_nearest * round(num / round_to_nearest))
+    return result
 
 
 def generate_training_cycle(
@@ -184,6 +183,7 @@ def save_cycle_to_db(generated_cycle: DefaultDict[str, DefaultDict[str, List[Lif
             pass 
     db.add(cycle)
     db.commit()
+    db.close()
 
 def previous_data_exists() -> bool:
     db = get_db()
@@ -195,42 +195,91 @@ def get_latest_cycle() -> Cycle:
     return db.query(Cycle).order_by(Cycle.index.desc()).first()
 
 
-def calculate_new_training_max(cycle: Cycle) -> typing.Dict[str, Decimal]:
+def calculate_new_training_max(
+    cycle: Cycle,
+    cycle_lift_increments: Optional[Dict[str, Union[Decimal, str]]] = None
+) -> Tuple[Dict[str, Decimal], Dict[str, Decimal]]:
     db = get_db()
-    new_training_max = db.query(
-        CycleLiftMax.lift,
-        CycleLiftMax.amount + coalesce(CycleLiftIncrement.amount, LiftIncrement.amount),
-      ).outerjoin(
-        CycleLiftIncrement, CycleLiftMax.lift==CycleLiftIncrement.lift
-    ).join(
-        LiftIncrement, CycleLiftMax.lift==LiftIncrement.lift
-    ).filter(
-        CycleLiftMax.cycle == cycle
-    ).all()
+    incremented_values = {}
 
-    training_maxes = {}
+    if cycle_lift_increments:
+        training_maxes={}
+        # get current lift_maxes and figure out what to do next
+        current_training_maxes = db.query(
+            CycleLiftMax
+        ).filter(
+            CycleLiftMax.cycle==cycle
+        ).all()
 
-    for row in new_training_max:
-        training_maxes[row[0]] = row[1]
-    return training_maxes
+        for current_max in current_training_maxes:
+            lift = current_max.lift
+            if lift in cycle_lift_increments:
+                need_to_roll_back = type(cycle_lift_increments[lift]) is str
+                if need_to_roll_back:
+                    training_maxes[lift] = get_one_rep_training_max(current_max.amount)
+                    incremented_values[lift] = training_maxes[lift] - current_max.amount
+                else:
+                    training_maxes[lift] = Decimal(current_max.amount) + cycle_lift_increments[lift]
+                    incremented_values[lift] = cycle_lift_increments[lift]
+            else:
+                standard_increment = Decimal(db.query(LiftIncrement).filter(LiftIncrement.lift==lift).one().amount)
+                training_maxes[lift] = Decimal(current_max.amount) + standard_increment
+                incremented_values[lift] = standard_increment
+
+
+
+    else:
+        new_training_max = db.query(
+            CycleLiftMax.lift,
+            CycleLiftMax.amount + coalesce(CycleLiftIncrement.amount, LiftIncrement.amount),
+          ).outerjoin(
+            CycleLiftIncrement, CycleLiftMax.lift==CycleLiftIncrement.lift
+        ).join(
+            LiftIncrement, CycleLiftMax.lift==LiftIncrement.lift
+        ).filter(
+            CycleLiftMax.cycle == cycle
+        ).all()
+
+        training_maxes = {}
+
+        for row in new_training_max:
+            training_maxes[row[0]] = row[1]
+        
+        for increment in db.query(LiftIncrement).all():
+            incremented_values[increment.lift] = increment.amount
+
+    return training_maxes, incremented_values
+
+
+def save_cycle_increments(increments: Dict[str, Decimal]):
+    db = get_db()
+    # cant use get_latest_cycle because when you assign object from different session when creating a new one
+    # it gets upset, I think
+    cycle = db.query(Cycle).order_by(Cycle.index.desc()).first()
+    for lift in increments:
+        increment = CycleLiftIncrement(lift=lift, amount=increments[lift], cycle=cycle)
+        db.add(increment)
+    db.commit()
 
 
 if __name__ == "__main__":
     if previous_data_exists():
         import sys
         most_recent_cycle = get_latest_cycle()
-        new_training_max = calculate_new_training_max(most_recent_cycle)
+        new_training_max, increments = calculate_new_training_max(
+            most_recent_cycle
+        )
         new_cycle = generate_training_cycle(new_training_max)
         save_cycle_to_db(new_cycle)
+        save_cycle_increments(increments)
         sys.exit()
 
     else:
         lifts_info = gather_lifts_info()
 
-
     lifts_one_rep_max = {
         lift_name: get_one_rep_max(reps_and_weight)
-        for (lift_name,reps_and_weight) in
+        for (lift_name, reps_and_weight) in
         lifts_info.items()
     }
     lifts_training_one_rep_max = {
