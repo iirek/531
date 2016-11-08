@@ -36,9 +36,28 @@ def drop_db():
     print('Dropped DB')
 
 
+@click.command('dump_cycles')
+def dump_cycles():
+    from datetime import datetime
+    import json
+    db = get_db()
+    dump_file_name = 'cycles_dump_{}.json'.format(str(datetime.now().date()))
+    data = []
+    with open(dump_file_name, 'w') as f:
+        for cycle in db.query(Cycle).order_by(Cycle.index):
+            cycle_data = {}
+            for lift_data in db.query(CycleLiftMax).filter(CycleLiftMax.cycle==cycle):
+                # because Decimal is not json serializable by default
+                cycle_data[lift_data.lift] = float(lift_data.amount)
+            cycle_data['index'] = cycle.index
+            data.append(cycle_data)
+        json.dump(data, f)
+
+
 
 cli.add_command(create_db)
 cli.add_command(drop_db)
+cli.add_command(dump_cycles)
 
 if __name__ == '__main__':
     cli()
